@@ -1,1 +1,25 @@
-# feet-tracking-frontend
+# Fleet Tracker Frontend
+
+WebSocket 기반 백엔드와 연동하여 GPS 경로, 속도, 가속도를 실시간으로 시각화하는 대시보드입니다.
+
+명세: [`docs/SPEC.md`](docs/SPEC.md)  
+디자인: [`docs/design/dashboard-mockup.png`](docs/design/dashboard-mockup.png)
+
+## 시작하기
+
+```bash
+npm install
+npm run dev
+```
+
+브라우저에서 `http://localhost:5173` 을 엽니다. Geolocation API는 `localhost` 또는 HTTPS에서 동작합니다.
+
+백엔드 기본 주소는 `src/config.ts`의 `BACKEND_HOST` / `BACKEND_PORT` (기본 `127.0.0.1:8000`)입니다. [`fleet-tracker-backend`](../../fleet-tracker-backend) 서버를 먼저 실행하세요.
+
+## 스크립트
+
+| 명령 | 설명 |
+|------|------|
+| `npm run dev` | 개발 서버 |
+| `npm run build` | 프로덕션 빌드 |
+| `npm run preview` | 빌드 미리보기 |
