@@ -1,4 +1,4 @@
-import { BACKEND_WS_URL } from '../config';
+import { getBackendWsUrl } from '../config';
 import type { GpsPoint } from '../types/telemetry';
 
 export type WsConnectionState = 'connecting' | 'connected' | 'disconnected';
@@ -62,7 +62,7 @@ export class FleetWebSocket {
 
   private open(): void {
     this.setState('connecting');
-    const ws = new WebSocket(BACKEND_WS_URL);
+    const ws = new WebSocket(getBackendWsUrl());
     this.ws = ws;
 
     ws.onopen = () => {
