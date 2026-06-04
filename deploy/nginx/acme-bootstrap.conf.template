@@ -1,0 +1,16 @@
+# 인증서 발급 직전에만 사용 — ACME 경로만 노출 (default_server)
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name __DOMAIN__ __EXTRA_SERVER_NAMES__;
+
+    location ^~ /.well-known/acme-challenge/ {
+        alias /var/www/html/.well-known/acme-challenge/;
+        default_type "text/plain";
+        allow all;
+    }
+
+    location / {
+        return 404;
+    }
+}

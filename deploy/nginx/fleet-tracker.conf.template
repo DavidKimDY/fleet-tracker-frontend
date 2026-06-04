@@ -7,8 +7,10 @@ server {
     root /var/www/fleet-tracker;
     index index.html;
 
-    location /.well-known/acme-challenge/ {
-        root /var/www/html;
+    location ^~ /.well-known/acme-challenge/ {
+        alias /var/www/html/.well-known/acme-challenge/;
+        default_type "text/plain";
+        allow all;
     }
 
     location /ram {

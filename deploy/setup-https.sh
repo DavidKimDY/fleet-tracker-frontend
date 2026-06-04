@@ -2,7 +2,7 @@
 # EC2 단독 배포: nginx + Let's Encrypt (webroot, --nginx 플러그인 미사용)
 set -euo pipefail
 
-DOMAIN="${DOMAIN:?DOMAIN 환경 변수를 설정하세요 (예: penutjam.com)}"
+DOMAIN="${DOMAIN:?DOMAIN 환경 변수를 설정하세요 (예: www.penutjam.com)}"
 CERTBOT_EMAIL="${CERTBOT_EMAIL:?CERTBOT_EMAIL 환경 변수를 설정하세요}"
 BACKEND_HOST="${BACKEND_HOST:-3.34.97.233}"
 BACKEND_PORT="${BACKEND_PORT:-8000}"

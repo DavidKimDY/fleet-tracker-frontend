@@ -4,8 +4,10 @@ server {
     listen [::]:80;
     server_name __DOMAIN__ __EXTRA_SERVER_NAMES__;
 
-    location /.well-known/acme-challenge/ {
-        root /var/www/html;
+    location ^~ /.well-known/acme-challenge/ {
+        alias /var/www/html/.well-known/acme-challenge/;
+        default_type "text/plain";
+        allow all;
     }
 
     location / {

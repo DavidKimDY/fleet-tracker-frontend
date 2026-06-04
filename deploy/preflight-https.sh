@@ -3,24 +3,14 @@
 set -euo pipefail
 
 DOMAIN="${DOMAIN:?}"
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=lib/deploy-common.sh
+source "$REPO_ROOT/deploy/lib/deploy-common.sh"
 
-public_ip() {
-  curl -fsS --max-time 3 https://checkip.amazonaws.com 2>/dev/null \
-    || curl -fsS --max-time 3 https://ifconfig.me 2>/dev/null \
-    || true
-}
-
-echo "=== 1) 이 EC2 퍼블릭 IP ==="
-MY_IP="$(public_ip)"
-echo "${MY_IP:-(조회 실패 — EC2 콘솔에서 퍼블릭 IP 확인)}"
-
-echo ""
-echo "=== 2) DNS A 레코드 (penutjam.com 이 IP와 같아야 함) ==="
+echo "=== 1–2) EC2 IP vs DNS A (반드시 일치) ==="
+deploy_assert_dns_points_here "$DOMAIN" || true
 if command -v dig >/dev/null 2>&1; then
-  dig +short A "$DOMAIN" || true
-  dig +short A "www.$DOMAIN" || true
-else
-  getent hosts "$DOMAIN" || true
+  echo "www.${DOMAIN}: $(dig +short A "www.${DOMAIN}" | head -1 || echo '-')"
 fi
 
 echo ""

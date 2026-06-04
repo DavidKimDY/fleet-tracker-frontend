@@ -16,7 +16,7 @@ npm run dev
 
 백엔드 주소는 `src/config.ts`에서 설정합니다. 로컬 개발 시 기본 `http://3.34.97.233:8000`, EC2 HTTPS 배포 시 nginx가 `/ram`, `/ws`로 프록시합니다.
 
-**EC2 + 무료 HTTPS (Let's Encrypt):** [`docs/DEPLOY-EC2-HTTPS.md`](docs/DEPLOY-EC2-HTTPS.md) — 프로덕션 도메인 `https://penutjam.com`
+**EC2 + 무료 HTTPS (Let's Encrypt):** [`docs/DEPLOY-EC2-HTTPS.md`](docs/DEPLOY-EC2-HTTPS.md) — 프로덕션 `https://www.penutjam.com`
 
 ## 스크립트
 
