@@ -14,7 +14,7 @@ npm run dev
 
 브라우저에서 `http://localhost:5173` 을 엽니다. Geolocation API는 `localhost` 또는 HTTPS에서 동작합니다.
 
-백엔드 기본 주소는 `src/config.ts`의 `BACKEND_HOST` / `BACKEND_PORT` (기본 `127.0.0.1:8000`)입니다. [`fleet-tracker-backend`](../../fleet-tracker-backend) 서버를 먼저 실행하세요.
+백엔드 주소는 `src/config.ts`의 `BACKEND_HTTP_URL` / `BACKEND_WS_URL` (기본 `http://127.0.0.1:8000`)입니다.
 
 ## 스크립트
 
