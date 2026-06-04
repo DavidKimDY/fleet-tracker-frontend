@@ -1,4 +1,5 @@
-import { useMemo } from 'react';
+import L from 'leaflet';
+import { useEffect, useRef } from 'react';
 import type { GpsPoint } from '../types/telemetry';
 
 type PathPoint = GpsPoint & { time: number };
@@ -9,138 +10,96 @@ type Props = {
   waiting?: boolean;
 };
 
-const VIEW_SIZE = 400;
-const PAD = 40;
+/** 서울 시청 기준 — 사용자가 서울에만 있을 때 기본 뷰 */
+const SEOUL_CENTER: L.LatLngExpression = [37.5665, 126.978];
+const DEFAULT_ZOOM = 12;
 
-function projectPoints(points: PathPoint[]) {
-  if (points.length === 0) return { pathD: '', vehicle: null as GpsPoint | null, heading: 0 };
+const PATH_STYLE: L.PolylineOptions = {
+  color: '#00ff88',
+  weight: 3,
+  opacity: 0.9,
+};
 
-  const lats = points.map((p) => p.lat);
-  const lngs = points.map((p) => p.lng);
-  const minLat = Math.min(...lats);
-  const maxLat = Math.max(...lats);
-  const minLng = Math.min(...lngs);
-  const maxLng = Math.max(...lngs);
-  const latSpan = maxLat - minLat || 0.0001;
-  const lngSpan = maxLng - minLng || 0.0001;
-
-  const inner = VIEW_SIZE - PAD * 2;
-  const toXY = (p: GpsPoint) => ({
-    x: PAD + ((p.lng - minLng) / lngSpan) * inner,
-    y: PAD + (1 - (p.lat - minLat) / latSpan) * inner,
-  });
-
-  const projected = points.map((p) => ({ ...toXY(p), raw: p }));
-  const pathD = projected
-    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
-    .join(' ');
-
-  const last = projected[projected.length - 1];
-  const prev = projected[Math.max(0, projected.length - 2)];
-  const heading =
-    Math.atan2(last.y - prev.y, last.x - prev.x) * (180 / Math.PI);
-
-  return {
-    pathD,
-    vehicle: { lat: last.raw.lat, lng: last.raw.lng },
-    vehicleXY: { x: last.x, y: last.y },
-    heading,
-  };
-}
+const VEHICLE_STYLE: L.CircleMarkerOptions = {
+  radius: 8,
+  fillColor: '#00ff88',
+  fillOpacity: 1,
+  color: '#ffffff',
+  weight: 2,
+};
 
 export function GpsPathView({ points, identifier, waiting }: Props) {
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const pathLayerRef = useRef<L.Polyline | null>(null);
+  const markerRef = useRef<L.CircleMarker | null>(null);
+
   const latest = points[points.length - 1];
-  const { pathD, vehicle, vehicleXY, heading } = useMemo(
-    () => projectPoints(points),
-    [points]
-  );
+  const vehicle = latest ?? null;
+
+  useEffect(() => {
+    const container = mapContainerRef.current;
+    if (!container || mapRef.current) return;
+
+    const map = L.map(container, {
+      center: SEOUL_CENTER,
+      zoom: DEFAULT_ZOOM,
+      zoomControl: true,
+    });
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      maxZoom: 19,
+    }).addTo(map);
+
+    mapRef.current = map;
+
+    const resizeId = requestAnimationFrame(() => map.invalidateSize());
+
+    return () => {
+      cancelAnimationFrame(resizeId);
+      map.remove();
+      mapRef.current = null;
+      pathLayerRef.current = null;
+      markerRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    pathLayerRef.current?.remove();
+    pathLayerRef.current = null;
+    markerRef.current?.remove();
+    markerRef.current = null;
+
+    if (points.length === 0) {
+      map.setView(SEOUL_CENTER, DEFAULT_ZOOM);
+      return;
+    }
+
+    const latLngs: L.LatLngExpression[] = points.map((p) => [p.lat, p.lng]);
+
+    if (points.length >= 2) {
+      const line = L.polyline(latLngs, PATH_STYLE).addTo(map);
+      pathLayerRef.current = line;
+      map.fitBounds(line.getBounds(), { padding: [48, 48], maxZoom: 16 });
+    } else {
+      map.setView(latLngs[0], 15);
+    }
+
+    const last = points[points.length - 1];
+    markerRef.current = L.circleMarker([last.lat, last.lng], VEHICLE_STYLE).addTo(
+      map
+    );
+  }, [points]);
 
   return (
     <section className="gps-view">
-      <div className="gps-view__canvas-wrap">
-        <svg
-          className="gps-view__canvas"
-          viewBox={`0 0 ${VIEW_SIZE} ${VIEW_SIZE}`}
-          role="img"
-          aria-label="GPS path"
-        >
-          <defs>
-            <pattern
-              id="grid"
-              width="20"
-              height="20"
-              patternUnits="userSpaceOnUse"
-            >
-              <path
-                d="M 20 0 L 0 0 0 20"
-                fill="none"
-                stroke="rgba(0, 255, 136, 0.08)"
-                strokeWidth="0.5"
-              />
-            </pattern>
-            <radialGradient id="radarGlow" cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stopColor="rgba(0, 255, 136, 0.06)" />
-              <stop offset="100%" stopColor="rgba(0, 0, 0, 0)" />
-            </radialGradient>
-          </defs>
-          <rect width="100%" height="100%" fill="#0d1210" />
-          <rect width="100%" height="100%" fill="url(#grid)" />
-          <circle
-            cx={VIEW_SIZE / 2}
-            cy={VIEW_SIZE / 2}
-            r={VIEW_SIZE / 2 - 10}
-            fill="url(#radarGlow)"
-            stroke="rgba(0, 255, 136, 0.15)"
-            strokeWidth="1"
-          />
-          <circle
-            cx={VIEW_SIZE / 2}
-            cy={VIEW_SIZE / 2}
-            r={(VIEW_SIZE / 2 - 10) * 0.66}
-            fill="none"
-            stroke="rgba(0, 255, 136, 0.08)"
-            strokeWidth="1"
-          />
-          <circle
-            cx={VIEW_SIZE / 2}
-            cy={VIEW_SIZE / 2}
-            r={(VIEW_SIZE / 2 - 10) * 0.33}
-            fill="none"
-            stroke="rgba(0, 255, 136, 0.08)"
-            strokeWidth="1"
-          />
-          {pathD && (
-            <path
-              d={pathD}
-              fill="none"
-              stroke="#00ff88"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              style={{
-                filter: 'drop-shadow(0 0 8px rgba(0, 255, 136, 0.5))',
-              }}
-            />
-          )}
-          {vehicleXY && (
-            <g
-              transform={`translate(${vehicleXY.x} ${vehicleXY.y}) rotate(${heading})`}
-            >
-              <rect
-                x="-10"
-                y="-6"
-                width="20"
-                height="12"
-                rx="2"
-                fill="#00ff88"
-                style={{
-                  filter: 'drop-shadow(0 0 10px rgba(0, 255, 136, 0.8))',
-                }}
-              />
-              <polygon points="0,-14 4,-8 -4,-8" fill="#ffffff" />
-            </g>
-          )}
-        </svg>
+      <div className="gps-view__map-wrap">
+        <div ref={mapContainerRef} className="gps-view__map" aria-label="GPS path map" />
         {waiting && (
           <div className="gps-view__overlay">데이터 대기 중…</div>
         )}
@@ -155,34 +114,14 @@ export function GpsPathView({ points, identifier, waiting }: Props) {
           </div>
           <div>
             <dt>LATITUDE</dt>
-            <dd>{vehicle?.lat.toFixed(4) ?? latest?.lat.toFixed(4) ?? '—'}</dd>
+            <dd>{vehicle?.lat.toFixed(4) ?? '—'}</dd>
           </div>
           <div>
             <dt>LONGITUDE</dt>
-            <dd>{vehicle?.lng.toFixed(4) ?? latest?.lng.toFixed(4) ?? '—'}</dd>
-          </div>
-          <div>
-            <dt>SAT_LOCKED</dt>
-            <dd>—/12</dd>
+            <dd>{vehicle?.lng.toFixed(4) ?? '—'}</dd>
           </div>
         </dl>
       </aside>
-
-      <footer className="gps-view__footer">
-        <span className="gps-view__signal">
-          SIGNAL_STRENGTH
-          <span className="gps-view__bars" aria-hidden>
-            <i className="on" />
-            <i className="on" />
-            <i className="on" />
-            <i />
-          </span>
-        </span>
-        <span className="gps-view__kalman">KALMAN_FILTER</span>
-        <span className="gps-view__toggle" aria-hidden>
-          ON
-        </span>
-      </footer>
     </section>
   );
 }

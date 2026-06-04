@@ -39,7 +39,6 @@ export function IdentifierPage() {
   return (
     <div className="identifier-page">
       <div className="identifier-page__card">
-        <p className="identifier-page__brand">VIGILANT_OS_v1.0</p>
         <h1 className="identifier-page__title">Fleet Tracker</h1>
         <p className="identifier-page__desc">
           텔레메트리 수집을 위한 차량 식별자를 확인하거나 수정하세요.

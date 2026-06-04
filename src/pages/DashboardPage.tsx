@@ -11,12 +11,7 @@ import {
   getCurrentGeoPosition,
   type GeoErrorCode,
 } from '../lib/geolocation';
-import {
-  fetchRamData,
-  parseAccelerationFromRam,
-  parseGpsResponse,
-  parseSpeedResponse,
-} from '../lib/telemetry';
+import { parseTelemetryResponse } from '../lib/telemetry';
 import { FleetWebSocket, type WsConnectionState } from '../lib/websocket';
 import type { TimeSeriesPoint } from '../types/telemetry';
 
@@ -87,18 +82,11 @@ export function DashboardPage() {
     }, GPS_SEND_INTERVAL_MS);
   }, [stopGpsSend]);
 
-  const pollTelemetry = useCallback(async () => {
+  const pollTelemetry = useCallback(() => {
     const id = identifierRef.current;
     if (!id || !wsRef.current) return;
 
-    wsRef.current.getGps(id);
-    wsRef.current.getSpeed(id);
-
-    const ram = await fetchRamData();
-    const accel = parseAccelerationFromRam(ram, id);
-    setAccelSeries(accel.series);
-    setCurrentAccel(accel.current);
-    if (accel.hasData) setHasTelemetry(true);
+    wsRef.current.getTelemetry(id);
   }, []);
 
   useEffect(() => {
@@ -136,16 +124,13 @@ export function DashboardPage() {
         return;
       }
 
-      const gps = parseGpsResponse(data, id);
-      if (gps.hasData) {
-        setPathPoints(gps.points);
-        setHasTelemetry(true);
-      }
-
-      const speed = parseSpeedResponse(data, id);
-      if (speed.hasData) {
-        setSpeedSeries(speed.series);
-        setCurrentSpeed(speed.current);
+      const telemetry = parseTelemetryResponse(data, id);
+      if (telemetry.hasData) {
+        setPathPoints(telemetry.points);
+        setSpeedSeries(telemetry.speedSeries);
+        setCurrentSpeed(telemetry.currentSpeed);
+        setAccelSeries(telemetry.accelSeries);
+        setCurrentAccel(telemetry.currentAccel);
         setHasTelemetry(true);
       }
 
@@ -180,17 +165,8 @@ export function DashboardPage() {
   const geoBlocked = geoStatus === 'denied';
 
   return (
-    <DashboardLayout wsState={wsState} sidebar={
+    <DashboardLayout sidebar={
       <>
-        <section className="panel panel--compact">
-          <span className="panel__label">Latency</span>
-          <span className="panel__value panel__value--green">
-            {wsState === 'connected' ? '—' : '…'}
-          </span>
-        </section>
-        <section className="panel panel--mode">
-          <span className="panel__mode-badge">AUTONOMOUS</span>
-        </section>
         <VelocityChart
           series={speedSeries}
           currentMs={currentSpeed}

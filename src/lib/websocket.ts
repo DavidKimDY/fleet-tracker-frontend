@@ -52,12 +52,8 @@ export class FleetWebSocket {
     });
   }
 
-  getGps(identifier: string): void {
-    this.send({ action: 'get_gps', identifier });
-  }
-
-  getSpeed(identifier: string): void {
-    this.send({ action: 'get_speed', identifier });
+  getTelemetry(identifier: string): void {
+    this.send({ action: 'get_telemetry', identifier });
   }
 
   private open(): void {
