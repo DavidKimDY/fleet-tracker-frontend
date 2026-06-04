@@ -100,11 +100,77 @@ VITE_BACKEND_HTTP_URL=https://api.example.com npm run build
 VITE_BACKEND_WS_URL=wss://api.example.com/ws npm run build
 ```
 
-## 문제 해결
+## Certbot 실패 시 (`Authority failed to verify`)
+
+Let's Encrypt는 **인터넷에서** `http://penutjam.com/.well-known/acme-challenge/...` 에 접근해 도메인을 확인합니다. 아래를 **프론트 EC2**에서 순서대로 확인하세요.
+
+### 1) 사전 점검 스크립트
+
+```bash
+export DOMAIN=penutjam.com
+chmod +x deploy/preflight-https.sh deploy/certbot-webroot.sh deploy/apply-ssl-nginx.sh
+sudo -E ./deploy/preflight-https.sh
+```
+
+### 2) DNS가 이 EC2 IP인지
+
+```bash
+curl -s https://checkip.amazonaws.com    # EC2 퍼블릭 IP
+dig +short A penutjam.com                # 도메인이 가리키는 IP — 둘이 같아야 함
+```
+
+- 다르면 도메인 업체(또는 Route 53)에서 **A 레코드** 수정 후 전파 대기(수분~수십분).
+- EC2 재시작 후 IP가 바뀌었으면 Elastic IP를 쓰지 않은 경우 DNS를 다시 맞춥니다.
+
+### 3) Security Group
+
+프론트 EC2 인바운드: **TCP 80**, **TCP 443** (`0.0.0.0/0` 또는 테스트용 본인 IP).
+
+### 4) nginx 기본 사이트 제거
+
+Amazon Linux/Ubuntu 기본 `default` 가 80을 먼저 받으면 ACME가 실패할 수 있습니다.
+
+```bash
+sudo mv /etc/nginx/conf.d/default.conf /etc/nginx/conf.d/default.conf.disabled 2>/dev/null || true
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+### 5) ACME 경로 외부 테스트
+
+```bash
+echo ok | sudo tee /var/www/html/.well-known/acme-challenge/test
+curl -v http://penutjam.com/.well-known/acme-challenge/test
+```
+
+본문에 `ok` 가 보여야 합니다. 안 되면 DNS/SG/nginx 문제입니다.
+
+### 6) 인증서만 다시 발급 (webroot, `--nginx` 미사용)
+
+최신 `deploy/` 스크립트 pull 후:
+
+```bash
+git pull
+export DOMAIN=penutjam.com
+export CERTBOT_EMAIL=you@example.com
+# www도 쓸 경우 DNS에 www A/CNAME 추가 후:
+# export EXTRA_DOMAINS=www.penutjam.com
+
+sudo -E ./deploy/certbot-webroot.sh
+sudo -E ./deploy/apply-ssl-nginx.sh
+```
+
+로그 상세:
+
+```bash
+sudo tail -50 /var/log/letsencrypt/letsencrypt.log
+```
+
+## 문제 해결 (기타)
 
 | 증상 | 확인 |
 |------|------|
-| certbot 실패 | 80 포트가 열려 있는지, DNS가 이 EC2를 가리키는지 |
-| GPS 안 됨 | `https://` 로 접속했는지 (HTTP + 공인 IP는 불가) |
-| API 실패 | 백엔드 8000 SG, nginx `location /ram` 프록시 |
-| WebSocket 끊김 | `location /ws` Upgrade 헤더, 백엔드 `/ws` 경로 |
+| certbot 실패 | 위 「Certbot 실패 시」 절차 |
+| `www` 접속만 사용 | `EXTRA_DOMAINS=www.penutjam.com` + DNS + certbot에 `-d www` |
+| GPS 안 됨 | `https://` 로 접속 |
+| API 실패 | 백엔드 8000 SG, nginx `location /ram` |
+| WebSocket 끊김 | `location /ws` Upgrade 헤더 |
