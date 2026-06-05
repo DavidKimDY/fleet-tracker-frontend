@@ -1,5 +1,6 @@
 import L from 'leaflet';
 import { useEffect, useRef } from 'react';
+import { ACCENT_PRIMARY } from '../lib/theme';
 import type { GpsPoint } from '../types/telemetry';
 
 type PathPoint = GpsPoint & { time: number };
@@ -16,14 +17,14 @@ const SEOUL_CENTER: L.LatLngExpression = [37.5665, 126.978];
 const DEFAULT_ZOOM = 12;
 
 const PATH_STYLE: L.PolylineOptions = {
-  color: '#00ff88',
+  color: ACCENT_PRIMARY,
   weight: 3,
   opacity: 0.9,
 };
 
 const VEHICLE_STYLE: L.CircleMarkerOptions = {
   radius: 8,
-  fillColor: '#00ff88',
+  fillColor: ACCENT_PRIMARY,
   fillOpacity: 1,
   color: '#ffffff',
   weight: 2,
