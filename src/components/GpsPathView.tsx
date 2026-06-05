@@ -8,6 +8,7 @@ type Props = {
   points: PathPoint[];
   identifier: string;
   waiting?: boolean;
+  overlayMessage?: string | null;
 };
 
 /** 서울 시청 기준 — 사용자가 서울에만 있을 때 기본 뷰 */
@@ -28,7 +29,12 @@ const VEHICLE_STYLE: L.CircleMarkerOptions = {
   weight: 2,
 };
 
-export function GpsPathView({ points, identifier, waiting }: Props) {
+export function GpsPathView({
+  points,
+  identifier,
+  waiting,
+  overlayMessage,
+}: Props) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const pathLayerRef = useRef<L.Polyline | null>(null);
@@ -100,8 +106,12 @@ export function GpsPathView({ points, identifier, waiting }: Props) {
     <section className="gps-view">
       <div className="gps-view__map-wrap">
         <div ref={mapContainerRef} className="gps-view__map" aria-label="GPS path map" />
-        {waiting && (
-          <div className="gps-view__overlay">데이터 대기 중…</div>
+        {(waiting || overlayMessage) && (
+          <div
+            className={`gps-view__overlay${overlayMessage && !waiting ? ' gps-view__overlay--alert' : ''}`}
+          >
+            {overlayMessage ?? '데이터 대기 중…'}
+          </div>
         )}
       </div>
 

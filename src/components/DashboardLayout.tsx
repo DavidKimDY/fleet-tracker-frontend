@@ -3,13 +3,17 @@ import type { ReactNode } from 'react';
 type Props = {
   children: ReactNode;
   sidebar: ReactNode;
+  headerExtra?: ReactNode;
 };
 
-export function DashboardLayout({ children, sidebar }: Props) {
+export function DashboardLayout({ children, sidebar, headerExtra }: Props) {
   return (
     <div className="dashboard">
       <header className="dashboard__header">
         <span className="dashboard__brand">Fleet Tracker</span>
+        {headerExtra && (
+          <div className="dashboard__header-actions">{headerExtra}</div>
+        )}
       </header>
 
       <div className="dashboard__body">

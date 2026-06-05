@@ -1,24 +1,36 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Navigate } from 'react-router-dom';
 import { AccelChart } from '../components/AccelChart';
 import { DashboardLayout } from '../components/DashboardLayout';
 import { GpsPathView } from '../components/GpsPathView';
+import { ObserveIdentifierModal } from '../components/ObserveIdentifierModal';
 import { VelocityChart } from '../components/VelocityChart';
-import { GPS_SEND_INTERVAL_MS, POLL_INTERVAL_MS } from '../config';
-import { getIdentifierFromCookie } from '../lib/cookies';
-import {
-  geoErrorMessage,
-  getCurrentGeoPosition,
-  type GeoErrorCode,
-} from '../lib/geolocation';
+import { POLL_INTERVAL_MS } from '../config';
+import { getObservedIdentifier, setObservedIdentifier } from '../lib/observe';
 import { parseTelemetryResponse } from '../lib/telemetry';
 import { FleetWebSocket, type WsConnectionState } from '../lib/websocket';
 import type { TimeSeriesPoint } from '../types/telemetry';
 
 type PathPoint = { lat: number; lng: number; time: number };
 
+type TelemetryStatus = 'idle' | 'waiting' | 'found' | 'not_found';
+
+function emptyTelemetry() {
+  return {
+    pathPoints: [] as PathPoint[],
+    speedSeries: [] as TimeSeriesPoint[],
+    currentSpeed: null as number | null,
+    accelSeries: [] as TimeSeriesPoint[],
+    currentAccel: null as number | null,
+    hasTelemetry: false,
+    telemetryStatus: 'idle' as TelemetryStatus,
+  };
+}
+
 export function DashboardPage() {
-  const identifier = getIdentifierFromCookie();
+  const [observedId, setObservedId] = useState<string | null>(() =>
+    getObservedIdentifier()
+  );
+  const [modalOpen, setModalOpen] = useState(() => !getObservedIdentifier());
   const [wsState, setWsState] = useState<WsConnectionState>('disconnected');
   const [pathPoints, setPathPoints] = useState<PathPoint[]>([]);
   const [speedSeries, setSpeedSeries] = useState<TimeSeriesPoint[]>([]);
@@ -26,61 +38,28 @@ export function DashboardPage() {
   const [accelSeries, setAccelSeries] = useState<TimeSeriesPoint[]>([]);
   const [currentAccel, setCurrentAccel] = useState<number | null>(null);
   const [hasTelemetry, setHasTelemetry] = useState(false);
-  const [geoStatus, setGeoStatus] = useState<
-    'loading' | 'ready' | 'denied' | 'error'
-  >('loading');
-  const [geoMessage, setGeoMessage] = useState<string | null>(null);
+  const [telemetryStatus, setTelemetryStatus] =
+    useState<TelemetryStatus>('idle');
   const [logs, setLogs] = useState<string[]>([]);
 
   const wsRef = useRef<FleetWebSocket | null>(null);
-  const gpsSendTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const identifierRef = useRef(identifier);
+  const identifierRef = useRef(observedId);
 
   const appendLog = useCallback((line: string) => {
     const stamp = new Date().toLocaleTimeString('ko-KR', { hour12: false });
     setLogs((prev) => [`[${stamp}] ${line}`, ...prev].slice(0, 8));
   }, []);
 
-  const stopGpsSend = useCallback(() => {
-    if (gpsSendTimerRef.current) {
-      clearInterval(gpsSendTimerRef.current);
-      gpsSendTimerRef.current = null;
-    }
+  const clearTelemetry = useCallback(() => {
+    const empty = emptyTelemetry();
+    setPathPoints(empty.pathPoints);
+    setSpeedSeries(empty.speedSeries);
+    setCurrentSpeed(empty.currentSpeed);
+    setAccelSeries(empty.accelSeries);
+    setCurrentAccel(empty.currentAccel);
+    setHasTelemetry(false);
   }, []);
-
-  const startGpsSend = useCallback(() => {
-    stopGpsSend();
-    if (!identifierRef.current) return;
-
-    const sendOnce = async () => {
-      if (wsRef.current === null) return;
-      try {
-        const pos = await getCurrentGeoPosition();
-        setGeoStatus('ready');
-        setGeoMessage(null);
-        wsRef.current.storeGps(identifierRef.current!, {
-          lat: pos.lat,
-          lng: pos.lng,
-        }, pos.time);
-      } catch (err) {
-        const code = (err as { code?: GeoErrorCode }).code;
-        if (code === 'permission_denied') {
-          setGeoStatus('denied');
-          setGeoMessage(geoErrorMessage(code));
-          stopGpsSend();
-        } else if (code) {
-          setGeoStatus('error');
-          setGeoMessage(geoErrorMessage(code));
-        }
-      }
-    };
-
-    void sendOnce();
-    gpsSendTimerRef.current = setInterval(() => {
-      void sendOnce();
-    }, GPS_SEND_INTERVAL_MS);
-  }, [stopGpsSend]);
 
   const pollTelemetry = useCallback(() => {
     const id = identifierRef.current;
@@ -89,13 +68,25 @@ export function DashboardPage() {
     wsRef.current.getTelemetry(id);
   }, []);
 
+  const applyObservedId = useCallback(
+    (id: string) => {
+      setObservedIdentifier(id);
+      identifierRef.current = id;
+      setObservedId(id);
+      setModalOpen(false);
+      clearTelemetry();
+      setTelemetryStatus('waiting');
+      appendLog(`Observing vehicle: ${id}`);
+      void pollTelemetry();
+    },
+    [appendLog, clearTelemetry, pollTelemetry]
+  );
+
   useEffect(() => {
-    if (!identifier) return;
-    identifierRef.current = identifier;
+    identifierRef.current = observedId;
+  }, [observedId]);
 
-    setGeoStatus('loading');
-    appendLog('Requesting geolocation…');
-
+  useEffect(() => {
     const client = new FleetWebSocket();
     wsRef.current = client;
 
@@ -103,15 +94,18 @@ export function DashboardPage() {
       setWsState(state);
       if (state === 'connected') {
         appendLog('WebSocket linked.');
-        startGpsSend();
-        void pollTelemetry();
+        if (identifierRef.current) {
+          setTelemetryStatus((prev) =>
+            prev === 'idle' ? 'waiting' : prev
+          );
+          void pollTelemetry();
+        }
         if (!pollTimerRef.current) {
           pollTimerRef.current = setInterval(() => {
             void pollTelemetry();
           }, POLL_INTERVAL_MS);
         }
       } else if (state === 'disconnected') {
-        stopGpsSend();
         appendLog('WebSocket disconnected — reconnecting…');
       }
     });
@@ -124,6 +118,18 @@ export function DashboardPage() {
         return;
       }
 
+      if (
+        data &&
+        typeof data === 'object' &&
+        'error' in data &&
+        data.error === 'not found'
+      ) {
+        clearTelemetry();
+        setTelemetryStatus('not_found');
+        appendLog(`No data for vehicle: ${id}`);
+        return;
+      }
+
       const telemetry = parseTelemetryResponse(data, id);
       if (telemetry.hasData) {
         setPathPoints(telemetry.points);
@@ -132,22 +138,13 @@ export function DashboardPage() {
         setAccelSeries(telemetry.accelSeries);
         setCurrentAccel(telemetry.currentAccel);
         setHasTelemetry(true);
-      }
-
-      if (
-        data &&
-        typeof data === 'object' &&
-        'error' in data &&
-        data.error === 'not found'
-      ) {
-        /* waiting for first store_gps */
+        setTelemetryStatus('found');
       }
     });
 
     client.connect();
 
     return () => {
-      stopGpsSend();
       if (pollTimerRef.current) {
         clearInterval(pollTimerRef.current);
         pollTimerRef.current = null;
@@ -155,72 +152,90 @@ export function DashboardPage() {
       client.disconnect();
       wsRef.current = null;
     };
-  }, [identifier, appendLog, pollTelemetry, startGpsSend, stopGpsSend]);
+  }, [appendLog, clearTelemetry, pollTelemetry]);
 
-  if (!identifier) {
-    return <Navigate to="/" replace />;
-  }
+  const waiting =
+    !!observedId &&
+    !hasTelemetry &&
+    wsState === 'connected' &&
+    telemetryStatus === 'waiting';
 
-  const waiting = !hasTelemetry && wsState === 'connected';
-  const geoBlocked = geoStatus === 'denied';
+  const notFound = telemetryStatus === 'not_found' && !!observedId;
+
+  const overlayMessage = !observedId
+    ? '관찰할 차량 식별자를 선택하세요.'
+    : notFound
+      ? `「${observedId}」 차량의 텔레메트리 데이터가 없습니다.`
+      : null;
+
+  const displayId = observedId ?? '—';
 
   return (
-    <DashboardLayout sidebar={
-      <>
-        <VelocityChart
-          series={speedSeries}
-          currentMs={currentSpeed}
-          waiting={waiting}
-        />
-        <AccelChart
-          series={accelSeries}
-          current={currentAccel}
-          waiting={waiting}
-        />
-        {(geoMessage || geoStatus === 'loading') && (
-          <p className={`panel__geo panel__geo--${geoStatus}`} role="status">
-            {geoStatus === 'loading'
-              ? '위치 권한 확인 중…'
-              : geoMessage}
-          </p>
-        )}
-        {geoBlocked && (
+    <>
+      <DashboardLayout
+        headerExtra={
           <button
             type="button"
-            className="panel__retry"
-            onClick={() => {
-              setGeoStatus('loading');
-              startGpsSend();
-            }}
+            className="dashboard__observe-btn"
+            onClick={() => setModalOpen(true)}
           >
-            위치 권한 재시도
+            {observedId ? `차량: ${observedId}` : '차량 식별자 선택'}
           </button>
-        )}
-        <section className="panel panel--log">
-          <header className="panel__header">
-            <span className="panel__label">System_Log_Stream</span>
-          </header>
-          <ul className="log-stream">
-            {logs.length === 0 ? (
-              <li className="log-stream__line log-stream__line--muted">
-                awaiting events…
-              </li>
-            ) : (
-              logs.map((line) => (
-                <li key={line} className="log-stream__line">
-                  {line}
-                </li>
-              ))
+        }
+        sidebar={
+          <>
+            {notFound && (
+              <p className="dashboard__alert" role="status">
+                「{observedId}」에 대한 데이터가 서버에 없습니다. /fleet에서
+                GPS 전송이 시작되었는지 확인하세요.
+              </p>
             )}
-          </ul>
-        </section>
-      </>
-    }>
-      <GpsPathView
-        points={pathPoints}
-        identifier={identifier}
-        waiting={waiting}
+            <VelocityChart
+              series={speedSeries}
+              currentMs={currentSpeed}
+              waiting={waiting}
+            />
+            <AccelChart
+              series={accelSeries}
+              current={currentAccel}
+              waiting={waiting}
+            />
+            <section className="panel panel--log">
+              <header className="panel__header">
+                <span className="panel__label">System_Log_Stream</span>
+              </header>
+              <ul className="log-stream">
+                {logs.length === 0 ? (
+                  <li className="log-stream__line log-stream__line--muted">
+                    awaiting events…
+                  </li>
+                ) : (
+                  logs.map((line) => (
+                    <li key={line} className="log-stream__line">
+                      {line}
+                    </li>
+                  ))
+                )}
+              </ul>
+            </section>
+          </>
+        }
+      >
+        <GpsPathView
+          points={pathPoints}
+          identifier={displayId}
+          waiting={waiting}
+          overlayMessage={overlayMessage}
+        />
+      </DashboardLayout>
+
+      <ObserveIdentifierModal
+        open={modalOpen}
+        initialValue={observedId ?? ''}
+        required={!observedId}
+        onClose={() => setModalOpen(false)}
+        onSubmit={applyObservedId}
       />
-    </DashboardLayout>
+    </>
   );
 }

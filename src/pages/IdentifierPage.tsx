@@ -6,6 +6,9 @@ import {
   setIdentifierCookie,
 } from '../lib/cookies';
 import { generateIdentifier } from '../lib/identifier';
+import { setObservedIdentifier } from '../lib/observe';
+
+type Destination = '/dashboard' | '/fleet';
 
 export function IdentifierPage() {
   const navigate = useNavigate();
@@ -26,14 +29,21 @@ export function IdentifierPage() {
     }
   }
 
-  function handleSubmit(e: FormEvent) {
-    e.preventDefault();
+  function goTo(destination: Destination) {
     if (!isValidIdentifier(value)) {
       setError('유효한 식별자를 입력하세요.');
       return;
     }
     setIdentifierCookie(value);
-    navigate('/dashboard', { replace: true });
+    if (destination === '/dashboard') {
+      setObservedIdentifier(value);
+    }
+    navigate(destination, { replace: true });
+  }
+
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    goTo('/dashboard');
   }
 
   return (
@@ -41,7 +51,8 @@ export function IdentifierPage() {
       <div className="identifier-page__card">
         <h1 className="identifier-page__title">Fleet Tracker</h1>
         <p className="identifier-page__desc">
-          텔레메트리 수집을 위한 차량 식별자를 확인하거나 수정하세요.
+          차량 식별자를 입력한 뒤, GPS를 전송할지 대시보드에서 관찰할지
+          선택하세요.
         </p>
         <form className="identifier-page__form" onSubmit={handleSubmit}>
           <label htmlFor="fleet-id" className="identifier-page__label">
@@ -60,13 +71,23 @@ export function IdentifierPage() {
               {error}
             </p>
           )}
-          <button
-            type="submit"
-            className="identifier-page__submit"
-            disabled={!!error}
-          >
-            ENTER DASHBOARD
-          </button>
+          <div className="identifier-page__actions">
+            <button
+              type="button"
+              className="identifier-page__btn identifier-page__btn--fleet"
+              disabled={!!error}
+              onClick={() => goTo('/fleet')}
+            >
+              차량 클라이언트 - GPS 전송
+            </button>
+            <button
+              type="submit"
+              className="identifier-page__btn identifier-page__btn--dashboard"
+              disabled={!!error}
+            >
+              관제 클라이언트 - 트래킹
+            </button>
+          </div>
         </form>
       </div>
     </div>

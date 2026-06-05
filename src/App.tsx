@@ -1,11 +1,10 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-import { getIdentifierFromCookie } from './lib/cookies';
 import { DashboardPage } from './pages/DashboardPage';
+import { FleetPage } from './pages/FleetPage';
 import { IdentifierPage } from './pages/IdentifierPage';
 
 function RootRedirect() {
-  const id = getIdentifierFromCookie();
-  return <Navigate to={id ? '/dashboard' : '/identify'} replace />;
+  return <Navigate to="/identify" replace />;
 }
 
 export default function App() {
@@ -15,6 +14,7 @@ export default function App() {
         <Route path="/" element={<RootRedirect />} />
         <Route path="/identify" element={<IdentifierPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/fleet" element={<FleetPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
